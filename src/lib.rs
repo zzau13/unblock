@@ -18,27 +18,15 @@
 use std::collections::VecDeque;
 use std::fmt::Formatter;
 use std::future::Future;
+use std::panic;
 use std::panic::UnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
-use std::{env, panic};
 
 use async_oneshot::oneshot;
 use once_cell::sync::Lazy;
-
-/// Default value for max threads that Executor can grow to
-const DEFAULT_MAX_THREADS: usize = 500;
-
-/// Minimum value for max threads config
-const MIN_MAX_THREADS: usize = 1;
-
-/// Maximum value for max threads config
-const MAX_MAX_THREADS: usize = 10000;
-
-/// Env variable that allows to override default value for max threads.
-const MAX_THREADS_ENV: &str = "BLOCKING_MAX_THREADS";
 
 /// Lazily initialized global executor.
 static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
@@ -102,13 +90,20 @@ struct Inner {
 
 impl Executor {
     fn max_threads() -> usize {
-        match env::var(MAX_THREADS_ENV) {
-            Ok(v) => v
-                .parse::<usize>()
-                .map(|v| v.max(MIN_MAX_THREADS).min(MAX_MAX_THREADS))
-                .unwrap_or(DEFAULT_MAX_THREADS),
-            Err(_) => DEFAULT_MAX_THREADS,
-        }
+        #[allow(unused_mut, unused_assignments)]
+        let mut threads = 1usize;
+        #[cfg(feature = "mt")]
+        {
+            threads = match std::env::var("BLOCK_THREADS")
+                .ok()
+                .and_then(|x| usize::from_str_radix(&x, 10).ok())
+            {
+                Some(num_cpus) => num_cpus,
+                None => num_cpus::get(),
+            };
+        };
+
+        threads
     }
 
     /// Spawns a future onto this executor.
@@ -235,28 +230,6 @@ pub fn unblock<T: Send + Sync + 'static, F: Fun<T>>(f: F) -> impl Task<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_max_threads() {
-        // properly set env var
-        env::set_var(MAX_THREADS_ENV, "100");
-        assert_eq!(100, Executor::max_threads());
-
-        // passed value below minimum, so we set it to minimum
-        env::set_var(MAX_THREADS_ENV, "0");
-        assert_eq!(1, Executor::max_threads());
-
-        // passed value above maximum, so we set to allowed maximum
-        env::set_var(MAX_THREADS_ENV, "50000");
-        assert_eq!(10000, Executor::max_threads());
-
-        // no env var, use default
-        env::set_var(MAX_THREADS_ENV, "");
-        assert_eq!(500, Executor::max_threads());
-
-        // not a number, use default
-        env::set_var(MAX_THREADS_ENV, "NOTINT");
-        assert_eq!(500, Executor::max_threads());
-    }
 
     #[test]
     fn test_sleep() {
