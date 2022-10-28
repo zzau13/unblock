@@ -9,20 +9,21 @@
 //! use std::fs;
 //!
 //! # futures_lite::future::block_on(async {
-//! let contents = unblock(|| fs::read_to_string("file.txt")).await.unwrap();
+//! let contents = unblock(|| fs::read_to_string("file.txt")).await?;
 //! println!("{:?}", contents);
 //! # std::io::Result::Ok(()) });
 //! ```
 //!
 
 use std::collections::VecDeque;
-use std::env;
 use std::fmt::Formatter;
 use std::future::Future;
+use std::panic::UnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use std::{env, panic};
 
 use async_oneshot::oneshot;
 use once_cell::sync::Lazy;
@@ -68,6 +69,9 @@ impl From<Error> for std::io::Error {
 pub trait Task<T: Send + 'static>: Future<Output = Result<T, Error>> {}
 impl<T: Send + 'static, F: Future<Output = Result<T, Error>>> Task<T> for F {}
 
+pub trait Fun<T: Send + 'static>: FnOnce() -> T + Send + UnwindSafe + 'static {}
+impl<T: Send + 'static, F: FnOnce() -> T + Send + UnwindSafe + 'static> Fun<T> for F {}
+
 /// The blocking executor.
 struct Executor {
     /// Inner state of the executor.
@@ -110,12 +114,18 @@ impl Executor {
     /// Spawns a future onto this executor.
     ///
     /// Returns a [`Task`] handle for the spawned task.
-    fn spawn<T: Send + Sync + 'static>(f: impl FnOnce() -> T + Send + 'static) -> impl Task<T> {
+    fn spawn<T: Send + Sync + 'static>(f: impl Fun<T>) -> impl Task<T> {
         let (mut tx, rx) = oneshot();
         EXECUTOR.schedule::<fn()>(Box::new(move || {
-            let _ = tx.send(f());
+            let r = panic::catch_unwind(f);
+            let _ = tx.send(r.map_err(|_| Error));
         }));
-        async move { rx.await.map_err(|_| Error) }
+        async move {
+            match rx.await {
+                Ok(result) => result,
+                Err(_) => Err(Error),
+            }
+        }
     }
 
     /// Runs the main loop on the current thread.
@@ -133,7 +143,6 @@ impl Executor {
                 self.grow_pool(inner);
 
                 // Run the task.
-                // TODO: unwind
                 runnable();
 
                 // Re-lock the inner state and continue.
@@ -218,11 +227,8 @@ impl Executor {
 /// let out = unblock(|| Command::new("dir").output()).await?;
 /// # std::io::Result::Ok(()) });
 /// ```
-pub fn unblock<T, F>(f: F) -> impl Task<T>
-where
-    F: FnOnce() -> T + Send + 'static,
-    T: Send + Sync + 'static,
-{
+// TODO: Sync is needed by oneshot but can be without it
+pub fn unblock<T: Send + Sync + 'static, F: Fun<T>>(f: F) -> impl Task<T> {
     Executor::spawn(f)
 }
 
@@ -264,6 +270,16 @@ mod tests {
                 .unwrap(),
                 "foo"
             )
+        });
+    }
+    #[test]
+    fn test_panic() {
+        futures_lite::future::block_on(async {
+            assert!(unblock(|| {
+                panic!("");
+            })
+            .await
+            .is_err())
         });
     }
 }
