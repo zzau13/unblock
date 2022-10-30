@@ -15,7 +15,7 @@ default = []
 mt = ["num_cpus"]
 
 [dependencies]
-async-oneshot = "0.5"
+async-oneshot = { git = "https://github.com/botika/async-oneshot" }
 once_cell = "1.4"
 num_cpus = { version = "1.13", optional = true }
 

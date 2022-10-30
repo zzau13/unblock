@@ -47,17 +47,22 @@ impl Display for Error {
     }
 }
 
+impl std::error::Error for Error {}
+
 impl From<Error> for std::io::Error {
     fn from(_: Error) -> std::io::Error {
         std::io::Error::from(std::io::ErrorKind::Other)
     }
 }
 
-pub trait Task<T: Send + 'static>: Future<Output = Result<T, Error>> {}
-impl<T: Send + 'static, F: Future<Output = Result<T, Error>>> Task<T> for F {}
+pub trait Val: Send + 'static {}
+impl<T: Send + 'static> Val for T {}
 
-pub trait Fun<T: Send + 'static>: FnOnce() -> T + Send + UnwindSafe + 'static {}
-impl<T: Send + 'static, F: FnOnce() -> T + Send + UnwindSafe + 'static> Fun<T> for F {}
+pub trait Task<T: Val>: Future<Output = Result<T, Error>> {}
+impl<T: Val, F: Future<Output = Result<T, Error>>> Task<T> for F {}
+
+pub trait Fun<T: Val>: FnOnce() -> T + UnwindSafe + Val {}
+impl<T: Val, F: FnOnce() -> T + UnwindSafe + Val> Fun<T> for F {}
 
 type Runnable = Box<dyn FnOnce() + Send + 'static>;
 
@@ -111,7 +116,7 @@ impl Executor {
     /// Spawns a future onto this executor.
     ///
     /// Returns a [`Task`] handle for the spawned task.
-    fn spawn<T: Send + Sync + 'static>(f: impl Fun<T>) -> impl Task<T> {
+    fn spawn<T: Val>(f: impl Fun<T>) -> impl Task<T> {
         let (mut tx, rx) = oneshot();
         EXECUTOR.schedule(Box::new(move || {
             let r = panic::catch_unwind(f);
@@ -215,8 +220,7 @@ impl Executor {
 /// let out = unblock(|| Command::new("dir").output()).await?;
 /// # std::io::Result::Ok(()) });
 /// ```
-// TODO: Sync is needed by oneshot but can be without it
-pub fn unblock<T: Send + Sync + 'static>(f: impl Fun<T>) -> impl Task<T> {
+pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
     Executor::spawn(f)
 }
 
