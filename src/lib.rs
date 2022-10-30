@@ -1,11 +1,11 @@
-//! A thread pool for isolating blocking in async programs.
+//! A thread pool for isolating unblock in async programs.
 //!
 //! # Examples
 //!
 //! Read the contents of a file:
 //!
 //! ```
-//! use blocking::unblock;
+//! use unblock::unblock;
 //! use std::fs;
 //!
 //! # futures_lite::future::block_on(async {
@@ -16,7 +16,7 @@
 //!
 
 use std::collections::VecDeque;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::panic;
 use std::panic::UnwindSafe;
@@ -41,7 +41,7 @@ static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Error;
 
-impl std::fmt::Display for Error {
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         "Error".fmt(f)
     }
@@ -61,7 +61,7 @@ impl<T: Send + 'static, F: FnOnce() -> T + Send + UnwindSafe + 'static> Fun<T> f
 
 type Runnable = Box<dyn FnOnce() + Send + 'static>;
 
-/// The blocking executor.
+/// The unblock executor.
 struct Executor {
     /// Inner state of the executor.
     inner: Mutex<Inner>,
@@ -73,7 +73,7 @@ struct Executor {
     thread_limit: usize,
 }
 
-/// Inner state of the blocking executor.
+/// Inner state of the unblock executor.
 struct Inner {
     /// Number of idle threads in the pool.
     ///
@@ -85,7 +85,7 @@ struct Inner {
     /// This is the number of idle threads + the number of active threads.
     thread_count: usize,
 
-    /// The queue of blocking tasks.
+    /// The queue of unblock tasks.
     queue: VecDeque<Runnable>,
 }
 
@@ -127,7 +127,7 @@ impl Executor {
 
     /// Runs the main loop on the current thread.
     ///
-    /// This function runs blocking tasks until it becomes idle and times out.
+    /// This function runs unblock tasks until it becomes idle and times out.
     fn main_loop(&'static self) {
         let mut inner = self.inner.lock().unwrap();
         loop {
@@ -165,7 +165,7 @@ impl Executor {
         self.grow_pool(inner);
     }
 
-    /// Spawns more blocking threads if the pool is overloaded with work.
+    /// Spawns more unblock threads if the pool is overloaded with work.
     fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
         // If runnable tasks greatly outnumber idle threads and there aren't too many threads
         // already, then be aggressive: wake all idle threads and spawn one more thread.
@@ -183,21 +183,21 @@ impl Executor {
 
             // Spawn the new thread.
             thread::Builder::new()
-                .name(format!("blocking-{}", id))
+                .name(format!("unblock-{}", id))
                 .spawn(move || self.main_loop())
                 .unwrap();
         }
     }
 }
 
-/// Runs blocking code on a thread pool.
+/// Runs unblock code on a thread pool.
 ///
 /// # Examples
 ///
 /// Read the contents of a file:
 ///
 /// ```
-/// use blocking::unblock;
+/// use unblock::unblock;
 /// use std::fs;
 ///
 /// # futures_lite::future::block_on(async {
@@ -208,7 +208,7 @@ impl Executor {
 /// Spawn a process:
 ///
 /// ```no_run
-/// use blocking::unblock;
+/// use unblock::unblock;
 /// use std::process::Command;
 ///
 /// # futures_lite::future::block_on(async {
