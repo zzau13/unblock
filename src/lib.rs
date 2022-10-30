@@ -23,7 +23,6 @@ use std::panic::UnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::Duration;
 
 use async_oneshot::oneshot;
 use once_cell::sync::Lazy;
@@ -60,6 +59,8 @@ impl<T: Send + 'static, F: Future<Output = Result<T, Error>>> Task<T> for F {}
 pub trait Fun<T: Send + 'static>: FnOnce() -> T + Send + UnwindSafe + 'static {}
 impl<T: Send + 'static, F: FnOnce() -> T + Send + UnwindSafe + 'static> Fun<T> for F {}
 
+type Runnable = Box<dyn FnOnce() + Send + 'static>;
+
 /// The blocking executor.
 struct Executor {
     /// Inner state of the executor.
@@ -85,10 +86,11 @@ struct Inner {
     thread_count: usize,
 
     /// The queue of blocking tasks.
-    queue: VecDeque<Box<dyn FnOnce() + Send + 'static>>,
+    queue: VecDeque<Runnable>,
 }
 
 impl Executor {
+    #[inline(always)]
     fn max_threads() -> usize {
         #[allow(unused_mut, unused_assignments)]
         let mut threads = 1usize;
@@ -111,7 +113,7 @@ impl Executor {
     /// Returns a [`Task`] handle for the spawned task.
     fn spawn<T: Send + Sync + 'static>(f: impl Fun<T>) -> impl Task<T> {
         let (mut tx, rx) = oneshot();
-        EXECUTOR.schedule::<fn()>(Box::new(move || {
+        EXECUTOR.schedule(Box::new(move || {
             let r = panic::catch_unwind(f);
             let _ = tx.send(r.map_err(|_| Error));
         }));
@@ -148,21 +150,13 @@ impl Executor {
             inner.idle_count += 1;
 
             // Put the thread to sleep until another task is scheduled.
-            let timeout = Duration::from_millis(500);
-            let (lock, res) = self.cvar.wait_timeout(inner, timeout).unwrap();
-            inner = lock;
-
-            // If there are no tasks after a while, stop this thread.
-            if res.timed_out() && inner.queue.is_empty() {
-                inner.idle_count -= 1;
-                inner.thread_count -= 1;
-                break;
-            }
+            inner = self.cvar.wait(inner).unwrap();
         }
     }
 
     /// Schedules a runnable task for execution.
-    fn schedule<F>(&'static self, runnable: Box<dyn FnOnce() + Send + 'static>) {
+    #[inline]
+    fn schedule(&'static self, runnable: Runnable) {
         let mut inner = self.inner.lock().unwrap();
         inner.queue.push_back(runnable);
 
@@ -175,8 +169,7 @@ impl Executor {
     fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
         // If runnable tasks greatly outnumber idle threads and there aren't too many threads
         // already, then be aggressive: wake all idle threads and spawn one more thread.
-        while inner.queue.len() > inner.idle_count * 5 && inner.thread_count < EXECUTOR.thread_limit
-        {
+        while inner.thread_count < self.thread_limit && inner.queue.len() > inner.idle_count * 5 {
             // The new thread starts in idle state.
             inner.idle_count += 1;
             inner.thread_count += 1;
@@ -223,7 +216,7 @@ impl Executor {
 /// # std::io::Result::Ok(()) });
 /// ```
 // TODO: Sync is needed by oneshot but can be without it
-pub fn unblock<T: Send + Sync + 'static, F: Fun<T>>(f: F) -> impl Task<T> {
+pub fn unblock<T: Send + Sync + 'static>(f: impl Fun<T>) -> impl Task<T> {
     Executor::spawn(f)
 }
 
