@@ -58,8 +58,8 @@ impl From<Error> for std::io::Error {
 pub trait Val: Send + 'static {}
 impl<T: Send + 'static> Val for T {}
 
-pub trait Task<T: Val>: Future<Output = Result<T, Error>>{}
-impl<T: Val, F: Future<Output = Result<T, Error>> > Task<T> for F {}
+pub trait Task<T: Val>: Future<Output = Result<T, Error>> {}
+impl<T: Val, F: Future<Output = Result<T, Error>>> Task<T> for F {}
 
 pub trait Fun<T: Val>: FnOnce() -> T + UnwindSafe + Val {}
 impl<T: Val, F: FnOnce() -> T + UnwindSafe + Val> Fun<T> for F {}
@@ -116,6 +116,7 @@ impl Executor {
     /// Spawns a future onto this executor.
     ///
     /// Returns a [`Task`] handle for the spawned task.
+    #[inline(always)]
     fn spawn<T: Val>(f: impl Fun<T>) -> impl Task<T> {
         let (mut tx, rx) = oneshot();
         EXECUTOR.schedule(Box::new(move || {
@@ -155,7 +156,7 @@ impl Executor {
     }
 
     /// Schedules a runnable task for execution.
-    #[inline]
+    #[inline(always)]
     fn schedule(&'static self, runnable: Runnable) {
         let mut inner = self.inner.lock();
         inner.queue.push_back(runnable);
@@ -166,6 +167,7 @@ impl Executor {
     }
 
     /// Spawns more unblock threads if the pool is overloaded with work.
+    #[inline(always)]
     fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
         // If runnable tasks greatly outnumber idle threads and there aren't too many threads
         // already, then be aggressive: wake all idle threads and spawn one more thread.
