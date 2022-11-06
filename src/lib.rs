@@ -8,7 +8,7 @@
 //! use unblock::unblock;
 //! use std::fs;
 //!
-//! # futures_lite::future::block_on(async {
+//! # futures::executor::block_on(async {
 //! let contents = unblock(|| fs::read_to_string("file.txt")).await?;
 //! println!("{:?}", contents);
 //! # std::io::Result::Ok(()) });
@@ -21,11 +21,11 @@ use std::future::Future;
 use std::panic;
 use std::panic::UnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
 
 use async_oneshot::oneshot;
 use once_cell::sync::Lazy;
+use parking_lot::{Condvar, Mutex, MutexGuard};
 
 /// Lazily initialized global executor.
 static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
@@ -58,8 +58,8 @@ impl From<Error> for std::io::Error {
 pub trait Val: Send + 'static {}
 impl<T: Send + 'static> Val for T {}
 
-pub trait Task<T: Val>: Future<Output = Result<T, Error>> {}
-impl<T: Val, F: Future<Output = Result<T, Error>>> Task<T> for F {}
+pub trait Task<T: Val>: Future<Output = Result<T, Error>>{}
+impl<T: Val, F: Future<Output = Result<T, Error>> > Task<T> for F {}
 
 pub trait Fun<T: Val>: FnOnce() -> T + UnwindSafe + Val {}
 impl<T: Val, F: FnOnce() -> T + UnwindSafe + Val> Fun<T> for F {}
@@ -134,35 +134,30 @@ impl Executor {
     ///
     /// This function runs unblock tasks until it becomes idle and times out.
     fn main_loop(&'static self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         loop {
             // This thread is not idle anymore because it's going to run tasks.
             inner.idle_count -= 1;
 
             // Run tasks in the queue.
             while let Some(runnable) = inner.queue.pop_front() {
-                // We have found a task - grow the pool if needed.
-                self.grow_pool(inner);
-
-                // Run the task.
+                drop(inner);
                 runnable();
-
-                // Re-lock the inner state and continue.
-                inner = self.inner.lock().unwrap();
+                inner = self.inner.lock();
             }
 
             // This thread is now becoming idle.
             inner.idle_count += 1;
 
             // Put the thread to sleep until another task is scheduled.
-            inner = self.cvar.wait(inner).unwrap();
+            self.cvar.wait(&mut inner);
         }
     }
 
     /// Schedules a runnable task for execution.
     #[inline]
     fn schedule(&'static self, runnable: Runnable) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         inner.queue.push_back(runnable);
 
         // Notify a sleeping thread and spawn more threads if needed.
@@ -174,13 +169,10 @@ impl Executor {
     fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
         // If runnable tasks greatly outnumber idle threads and there aren't too many threads
         // already, then be aggressive: wake all idle threads and spawn one more thread.
-        while inner.thread_count < self.thread_limit && inner.queue.len() > inner.idle_count * 5 {
+        while inner.thread_count < self.thread_limit {
             // The new thread starts in idle state.
             inner.idle_count += 1;
             inner.thread_count += 1;
-
-            // Notify all existing idle threads because we need to hurry up.
-            self.cvar.notify_all();
 
             // Generate a new thread ID.
             static ID: AtomicUsize = AtomicUsize::new(1);
@@ -205,7 +197,7 @@ impl Executor {
 /// use unblock::unblock;
 /// use std::fs;
 ///
-/// # futures_lite::future::block_on(async {
+/// # futures::executor::block_on(async {
 /// let contents = unblock(|| fs::read_to_string("file.txt")).await?;
 /// # std::io::Result::Ok(()) });
 /// ```
@@ -216,7 +208,7 @@ impl Executor {
 /// use unblock::unblock;
 /// use std::process::Command;
 ///
-/// # futures_lite::future::block_on(async {
+/// # futures::executor::block_on(async {
 /// let out = unblock(|| Command::new("dir").output()).await?;
 /// # std::io::Result::Ok(()) });
 /// ```
@@ -228,28 +220,66 @@ pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_sleep() {
-        futures_lite::future::block_on(async {
-            assert_eq!(
-                unblock(|| {
-                    std::thread::sleep(std::time::Duration::from_secs(1));
-                    "foo"
-                })
-                .await
-                .unwrap(),
-                "foo"
-            )
-        });
+    use std::time::Duration;
+
+    use futures::future::join_all;
+
+    macro_rules! test {
+        ($name:ident -> $block:block) => {
+            #[test]
+            fn $name() {
+                futures::executor::block_on(async { $block })
+            }
+        };
     }
-    #[test]
-    fn test_panic() {
-        futures_lite::future::block_on(async {
-            assert!(unblock(|| {
-                panic!("");
+
+    test!(test_sleep -> {
+        assert_eq!(
+            unblock(|| {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                "foo"
             })
             .await
-            .is_err())
-        });
+            .unwrap(),
+            "foo"
+        )
+    });
+
+    fn sleep() {
+        std::thread::sleep(Duration::from_millis(1));
     }
+
+    test!(test_join -> {
+        let mut fut = Vec::with_capacity(256);
+        for _ in 0..256 {
+            fut.push(unblock(sleep))
+        }
+        assert!(join_all(fut).await.iter().all(|x| x.is_ok()));
+    });
+
+    test!(test_panic -> {
+        assert!(unblock(|| {
+            panic!();
+        })
+        .await
+        .is_err());
+        assert_eq!(
+            unblock(|| {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                "foo"
+            })
+            .await
+            .unwrap(),
+            "foo"
+        );
+        assert!(
+            unblock(|| {
+                std::thread::current().name().map(|x| x.to_string())
+            })
+            .await
+            .unwrap()
+            .unwrap()
+            .starts_with("unblock")
+        );
+    });
 }
