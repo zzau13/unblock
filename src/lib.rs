@@ -137,7 +137,7 @@ impl Executor {
 
     /// Runs the main loop on the current thread.
     ///
-    /// This function runs unblock tasks until it becomes idle and times out.
+    /// This function runs unblock tasks until it becomes idle.
     fn main_loop(&'static self) {
         let mut inner = self.inner.lock();
         loop {
@@ -194,7 +194,7 @@ impl Executor {
     }
 }
 
-/// Runs unblock code on a thread pool.
+/// Runs unblock code on a thread pool and return a future
 ///
 /// # Examples
 ///
