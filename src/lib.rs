@@ -140,8 +140,10 @@ impl Executor {
     /// Schedules a runnable task for execution.
     #[inline(always)]
     fn schedule(&'static self, runnable: Runnable) {
-        let mut queue = self.queue.lock();
-        queue.push_back(runnable);
+        {
+            let mut queue = self.queue.lock();
+            queue.push_back(runnable);
+        }
 
         // Notify a sleeping thread and spawn more threads if needed.
         self.cvar.notify_one();
