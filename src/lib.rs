@@ -176,15 +176,18 @@ impl Executor {
             inner.idle_count += 1;
             inner.thread_count += 1;
 
+            drop(inner);
+
             // Generate a new thread ID.
             static ID: AtomicUsize = AtomicUsize::new(1);
             let id = ID.fetch_add(1, Ordering::Relaxed);
 
             // Spawn the new thread.
             thread::Builder::new()
-                .name(format!("unblock-{}", id))
+                .name(format!("unblock-{id}"))
                 .spawn(move || self.main_loop())
                 .unwrap();
+            inner = self.inner.lock();
         }
     }
 }
