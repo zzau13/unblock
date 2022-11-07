@@ -153,11 +153,7 @@ impl Executor {
     fn grow_pool(&'static self) {
         while self.thread_count.load(Ordering::SeqCst) < self.thread_limit {
             // The new thread starts in idle state.
-            self.thread_count.fetch_add(1, Ordering::Relaxed);
-
-            // Generate a new thread ID.
-            static ID: AtomicUsize = AtomicUsize::new(1);
-            let id = ID.fetch_add(1, Ordering::Relaxed);
+            let id = self.thread_count.fetch_add(1, Ordering::Relaxed);
 
             // Spawn the new thread.
             thread::Builder::new()
