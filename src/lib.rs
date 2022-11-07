@@ -186,7 +186,7 @@ impl Executor {
 
             // Spawn the new thread.
             thread::Builder::new()
-                .name(format!("unblock-{id}"))
+                .name(format!("unblock-{}", id))
                 .spawn(move || self.main_loop())
                 .unwrap();
             inner = self.inner.lock();
