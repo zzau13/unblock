@@ -27,9 +27,9 @@ use std::panic::UnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
-use async_oneshot::oneshot;
 use once_cell::sync::Lazy;
 use parking_lot::{Condvar, Mutex, MutexGuard};
+use tokio::sync::oneshot::channel as oneshot;
 
 /// Lazily initialized global executor.
 static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
@@ -122,7 +122,7 @@ impl Executor {
     /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
     fn spawn<T: Val>(f: impl Fun<T>) -> impl Task<T> {
-        let (mut tx, rx) = oneshot();
+        let (tx, rx) = oneshot();
         EXECUTOR.schedule(Box::new(move || {
             let r = panic::catch_unwind(f);
             let _ = tx.send(r.map_err(|_| Error));
