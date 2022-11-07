@@ -216,7 +216,8 @@ impl Executor {
 /// use std::process::Command;
 ///
 /// # futures::executor::block_on(async {
-/// let out = unblock(|| Command::new("echo").output()).await?;
+/// let out = unblock(|| Command::new("echo").arg("foo").output()).await??.stdout;
+/// assert_eq!(out, b"foo\n");
 /// # std::io::Result::Ok(()) });
 /// ```
 pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
