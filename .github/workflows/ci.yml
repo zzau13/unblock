@@ -27,7 +27,7 @@ jobs:
       - run: cargo build --all --all-features --all-targets
       - name: Run cargo check (without dev-dependencies to catch missing feature flags)
         if: startsWith(matrix.rust, 'nightly')
-        run: cargo check -Z --all-features
+        run: cargo check --all-features
       - run: cargo test --all-features
 
   msrv:
@@ -36,7 +36,7 @@ jobs:
       matrix:
         # When updating this, the reminder to update the minimum supported
         # Rust version in Cargo.toml and .clippy.toml.
-        rust: ['1.47']
+        rust: ['1.57']
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
@@ -69,7 +69,7 @@ jobs:
       - run: cargo miri test
         env:
           # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
-          MIRIFLAGS: -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-ignore-leaks
+          MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-disable-isolation -Zmiri-ignore-leaks
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Z randomize-layout
 
   security_audit:

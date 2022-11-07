@@ -107,7 +107,7 @@ impl Executor {
         {
             threads = match std::env::var("BLOCK_THREADS")
                 .ok()
-                .and_then(|x| usize::from_str_radix(&x, 10).ok())
+                .and_then(|x| x.parse().ok())
             {
                 Some(num_cpus) => num_cpus,
                 None => num_cpus::get(),
