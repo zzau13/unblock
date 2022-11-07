@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        rust: [nightly, beta, stable]
+        rust: [nightly, stable]
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
@@ -27,8 +27,8 @@ jobs:
       - run: cargo build --all --all-features --all-targets
       - name: Run cargo check (without dev-dependencies to catch missing feature flags)
         if: startsWith(matrix.rust, 'nightly')
-        run: cargo check -Z features=dev_dep
-      - run: cargo test
+        run: cargo check -Z --all-features
+      - run: cargo test --all-features
 
   msrv:
     runs-on: ubuntu-latest
@@ -48,6 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
+        if: startsWith(matrix.rust, 'stable')
         run: rustup update stable
       - run: cargo clippy --all-features --all-targets
 
