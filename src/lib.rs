@@ -28,15 +28,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
 use once_cell::sync::Lazy;
-use parking_lot::{Condvar, Mutex, MutexGuard};
+use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
 
 /// Lazily initialized global executor.
 static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
-    inner: Mutex::new(Inner {
-        thread_count: 0,
-        queue: VecDeque::new(),
-    }),
+    queue: Mutex::new(VecDeque::new()),
+    thread_count: AtomicUsize::new(0),
     cvar: Condvar::new(),
     thread_limit: Executor::max_threads(),
 });
@@ -71,25 +69,17 @@ type Runnable = Box<dyn FnOnce() + Send + 'static>;
 
 /// The unblock executor.
 struct Executor {
-    /// Inner state of the executor.
-    inner: Mutex<Inner>,
+    /// Inner queue
+    queue: Mutex<VecDeque<Runnable>>,
+
+    /// Number of spwamed threads
+    thread_count: AtomicUsize,
 
     /// Used to put idle threads to sleep and wake them up when new work comes in.
     cvar: Condvar,
 
     /// Maximum number of threads in the pool
     thread_limit: usize,
-}
-
-/// Inner state of the unblock executor.
-struct Inner {
-    /// Total number of threads in the pool.
-    ///
-    /// This is the number of idle threads + the number of active threads.
-    thread_count: usize,
-
-    /// The queue of unblock tasks.
-    queue: VecDeque<Runnable>,
 }
 
 impl Executor {
@@ -133,39 +123,37 @@ impl Executor {
     ///
     /// This function runs unblock tasks until it becomes idle.
     fn main_loop(&'static self) {
-        let mut inner = self.inner.lock();
+        let mut queue = self.queue.lock();
         loop {
             // Run tasks in the queue.
-            while let Some(runnable) = inner.queue.pop_front() {
-                drop(inner);
+            while let Some(runnable) = queue.pop_front() {
+                drop(queue);
                 runnable();
-                inner = self.inner.lock();
+                queue = self.queue.lock();
             }
 
             // Put the thread to sleep until another task is scheduled.
-            self.cvar.wait(&mut inner);
+            self.cvar.wait(&mut queue);
         }
     }
 
     /// Schedules a runnable task for execution.
     #[inline(always)]
     fn schedule(&'static self, runnable: Runnable) {
-        let mut inner = self.inner.lock();
-        inner.queue.push_back(runnable);
+        let mut queue = self.queue.lock();
+        queue.push_back(runnable);
 
         // Notify a sleeping thread and spawn more threads if needed.
         self.cvar.notify_one();
-        self.grow_pool(inner);
+        self.grow_pool();
     }
 
     /// Spawns more block threads
     #[inline(always)]
-    fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
-        while inner.thread_count < self.thread_limit {
+    fn grow_pool(&'static self) {
+        while self.thread_count.load(Ordering::SeqCst) < self.thread_limit {
             // The new thread starts in idle state.
-            inner.thread_count += 1;
-
-            drop(inner);
+            self.thread_count.fetch_add(1, Ordering::Relaxed);
 
             // Generate a new thread ID.
             static ID: AtomicUsize = AtomicUsize::new(1);
@@ -176,7 +164,6 @@ impl Executor {
                 .name(format!("unblock-{}", id))
                 .spawn(move || self.main_loop())
                 .unwrap();
-            inner = self.inner.lock();
         }
     }
 }
