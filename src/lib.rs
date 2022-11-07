@@ -34,7 +34,6 @@ use tokio::sync::oneshot::channel as oneshot;
 /// Lazily initialized global executor.
 static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
     inner: Mutex::new(Inner {
-        idle_count: 0,
         thread_count: 0,
         queue: VecDeque::new(),
     }),
@@ -84,11 +83,6 @@ struct Executor {
 
 /// Inner state of the unblock executor.
 struct Inner {
-    /// Number of idle threads in the pool.
-    ///
-    /// Idle threads are sleeping, waiting to get a task to run.
-    idle_count: usize,
-
     /// Total number of threads in the pool.
     ///
     /// This is the number of idle threads + the number of active threads.
@@ -141,18 +135,12 @@ impl Executor {
     fn main_loop(&'static self) {
         let mut inner = self.inner.lock();
         loop {
-            // This thread is not idle anymore because it's going to run tasks.
-            inner.idle_count -= 1;
-
             // Run tasks in the queue.
             while let Some(runnable) = inner.queue.pop_front() {
                 drop(inner);
                 runnable();
                 inner = self.inner.lock();
             }
-
-            // This thread is now becoming idle.
-            inner.idle_count += 1;
 
             // Put the thread to sleep until another task is scheduled.
             self.cvar.wait(&mut inner);
@@ -175,7 +163,6 @@ impl Executor {
     fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
         while inner.thread_count < self.thread_limit {
             // The new thread starts in idle state.
-            inner.idle_count += 1;
             inner.thread_count += 1;
 
             drop(inner);
