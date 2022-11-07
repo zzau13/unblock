@@ -1,12 +1,16 @@
-//! A thread pool for isolating unblock in async programs.
+//! A thread pool for isolating blocking in async programs.
+//!
+//! With `mt` feature the default number of threads (set to number of cpus) can be altered
+//! by setting `BLOCK_THREADS` environment variable with value.
 //!
 //! # Examples
 //!
 //! Read the contents of a file:
 //!
 //! ```
-//! use unblock::unblock;
 //! use std::fs;
+//!
+//! use unblock::unblock;
 //!
 //! # futures::executor::block_on(async {
 //! let contents = unblock(|| fs::read_to_string("file.txt")).await?;
@@ -38,7 +42,7 @@ static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
     thread_limit: Executor::max_threads(),
 });
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Error;
 
 impl Display for Error {
@@ -166,11 +170,9 @@ impl Executor {
         self.grow_pool(inner);
     }
 
-    /// Spawns more unblock threads if the pool is overloaded with work.
+    /// Spawns more block threads
     #[inline(always)]
     fn grow_pool(&'static self, mut inner: MutexGuard<'static, Inner>) {
-        // If runnable tasks greatly outnumber idle threads and there aren't too many threads
-        // already, then be aggressive: wake all idle threads and spawn one more thread.
         while inner.thread_count < self.thread_limit {
             // The new thread starts in idle state.
             inner.idle_count += 1;
@@ -209,12 +211,12 @@ impl Executor {
 ///
 /// Spawn a process:
 ///
-/// ```no_run
+/// ```
 /// use unblock::unblock;
 /// use std::process::Command;
 ///
 /// # futures::executor::block_on(async {
-/// let out = unblock(|| Command::new("dir").output()).await?;
+/// let out = unblock(|| Command::new("echo").output()).await?;
 /// # std::io::Result::Ok(()) });
 /// ```
 pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
