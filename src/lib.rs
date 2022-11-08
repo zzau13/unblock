@@ -227,7 +227,7 @@ pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
 
 /// Runs multiple unblock code on a thread pool and return futures in order
 ///
-/// Read the contents of a file:
+/// Read the contents of files:
 ///
 /// ```
 /// use unblock::unblocks;
