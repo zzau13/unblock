@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use futures::future::join_all;
 
-use unblock::unblock;
+use unblock::{unblock, unblocks};
 
 macro_rules! test {
     ($name:ident -> $block:block) => {
@@ -61,4 +61,10 @@ test!(test_panic -> {
         .unwrap()
         .starts_with("unblock")
     );
+});
+
+test!(test_unblocks -> {
+    for i in unblocks((0..10).map(|_| sleep)) {
+       assert!(i.await.is_ok());
+    }
 });

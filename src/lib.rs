@@ -105,6 +105,32 @@ impl Executor {
     ///
     /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
+    pub fn spawns<T: Val, G: Fun<T>, I: IntoIterator<Item = G>>(f: I) -> Vec<impl Task<T>> {
+        let tasks = f
+            .into_iter()
+            .map(|f| {
+                let (tx, rx) = oneshot();
+
+                EXECUTOR.schedules(Box::new(move || {
+                    let r = panic::catch_unwind(f);
+                    let _ = tx.send(r.map_err(|_| Error));
+                }));
+                async move {
+                    match rx.await {
+                        Ok(result) => result,
+                        Err(_) => Err(Error),
+                    }
+                }
+            })
+            .collect();
+        EXECUTOR.grow_pool();
+        tasks
+    }
+
+    /// Spawns a future onto this executor.
+    ///
+    /// Returns a [`Task`] handle for the spawned task.
+    #[inline(always)]
     fn spawn<T: Val>(f: impl Fun<T>) -> impl Task<T> {
         let (tx, rx) = oneshot();
         EXECUTOR.schedule(Box::new(move || {
@@ -135,6 +161,14 @@ impl Executor {
             // Put the thread to sleep until another task is scheduled.
             self.cvar.wait(&mut queue);
         }
+    }
+    /// Schedules a runnable task for execution.
+    #[inline(always)]
+    fn schedules(&'static self, runnable: Runnable) {
+        self.queue.lock().push_back(runnable);
+
+        // Notify a sleeping thread and spawn more threads if needed.
+        self.cvar.notify_one();
     }
 
     /// Schedules a runnable task for execution.
@@ -191,4 +225,9 @@ impl Executor {
 /// ```
 pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
     Executor::spawn(f)
+}
+
+/// Runs multiple unblock code on a thread pool and return futures in order
+pub fn unblocks<T: Val, G: Fun<T>, I: IntoIterator<Item = G>>(f: I) -> Vec<impl Task<T>> {
+    Executor::spawns(f)
 }
