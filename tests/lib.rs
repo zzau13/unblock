@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use futures::future::join_all;
+use futures::executor::block_on;
+use futures::future::{join, join_all};
 
 use unblock::{unblock, unblocks};
 
@@ -8,7 +9,7 @@ macro_rules! test {
     ($name:ident -> $block:block) => {
         #[test]
         fn $name() {
-            futures::executor::block_on(async { $block })
+            block_on(async { $block })
         }
     };
 }
@@ -76,3 +77,14 @@ test!(test_unblocks -> {
         assert_eq!(i.await, Ok(x));
     }
 });
+
+#[test]
+fn test_thread() {
+    let j = std::thread::spawn(|| block_on(unblock(sleep)));
+    let fut_j = std::thread::spawn(|| unblock(sleep)).join().unwrap();
+    let fut = unblock(sleep);
+    assert!(j.join().is_ok());
+    let (i, j) = block_on(join(fut, fut_j));
+    assert!(i.is_ok());
+    assert!(j.is_ok());
+}
