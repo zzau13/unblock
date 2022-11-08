@@ -39,6 +39,7 @@ static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
     thread_limit: Executor::max_threads(),
 });
 
+/// No-size error
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Error;
 
@@ -81,6 +82,8 @@ struct Executor {
     /// Maximum number of threads in the pool
     thread_limit: usize,
 }
+
+/// create Runnable, schedule and return join
 macro_rules! runnable {
     ($_self:ident spawn $f:ident) => {
         runnable!(inside $_self, $f, schedule)
@@ -123,9 +126,7 @@ impl Executor {
         threads
     }
 
-    /// Spawns a future onto this executor.
-    ///
-    /// Returns a [`Task`] handle for the spawned task.
+    /// Spawns futures onto this executor.
     #[inline(always)]
     pub fn spawns<T: Val>(
         &'static self,
@@ -137,8 +138,6 @@ impl Executor {
     }
 
     /// Spawns a future onto this executor.
-    ///
-    /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
     fn spawn<T: Val>(&'static self, f: impl Fun<T>) -> impl Task<T> {
         runnable!(self spawn f)
@@ -227,6 +226,21 @@ pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
 }
 
 /// Runs multiple unblock code on a thread pool and return futures in order
+///
+/// Read the contents of a file:
+///
+/// ```
+/// use unblock::unblocks;
+/// use std::fs;
+///
+///
+/// # futures::executor::block_on(async { ///
+/// for result in unblocks(["name.txt", "foo.txt"].map(|name| move || fs::read_to_string(name))) {
+///     println!("{}", result.await??);
+/// }
+/// # std::io::Result::Ok(()) });
+/// ```
+///
 pub fn unblocks<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
     EXECUTOR.spawns(f)
 }
