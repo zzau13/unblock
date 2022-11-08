@@ -19,6 +19,7 @@
 //! ```
 //!
 
+use std::cmp::max;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
@@ -32,11 +33,14 @@ use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
 
 /// Lazily initialized global executor.
-static EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor {
-    queue: Mutex::new(VecDeque::new()),
-    thread_count: AtomicUsize::new(0),
-    cvar: Condvar::new(),
-    thread_limit: Executor::max_threads(),
+static EXECUTOR: Lazy<Executor> = Lazy::new(|| {
+    let thread_limit = Executor::max_threads();
+    Executor {
+        queue: Mutex::new(VecDeque::with_capacity(max(thread_limit, 256))),
+        thread_count: AtomicUsize::new(0),
+        cvar: Condvar::new(),
+        thread_limit,
+    }
 });
 
 /// No-size error
