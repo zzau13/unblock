@@ -1,3 +1,7 @@
+# 0.3.0 - 2022-11-08
+    
+    - Add `unblocks` for spawm multiple
+
 # 0.2.0 - 2022-11-07
 
     - Improve performance removing unnecessary locks
