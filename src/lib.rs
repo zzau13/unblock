@@ -88,12 +88,12 @@ struct Executor {
 }
 
 /// create Runnable, schedule and return join
-macro_rules! runnable {
-    ($_self:ident spawn $f:ident) => {
-        runnable!(inside $_self, $f, schedule)
+macro_rules! run {
+    ($f:ident in $_self:ident) => {
+        run!(inside $_self, $f, schedule)
     };
-    ($_self:ident spawns $f:ident) => {
-        runnable!(inside $_self, $f, schedules)
+    ($f:ident 's in $_self:ident ) => {
+        run!(inside $_self, $f, schedules)
     };
     (inside $_self:ident, $f:ident, $m:ident) => {{
         let (tx, rx) = oneshot();
@@ -136,7 +136,7 @@ impl Executor {
         &'static self,
         f: impl IntoIterator<Item = impl Fun<T>>,
     ) -> Vec<impl Task<T>> {
-        let tasks = f.into_iter().map(|f| runnable!(self spawns f)).collect();
+        let tasks = f.into_iter().map(|f| run!(f 's in self)).collect();
         self.grow_pool();
         tasks
     }
@@ -144,7 +144,7 @@ impl Executor {
     /// Spawns a future onto this executor.
     #[inline(always)]
     fn spawn<T: Val>(&'static self, f: impl Fun<T>) -> impl Task<T> {
-        runnable!(self spawn f)
+        run!(f in self)
     }
 
     /// Runs the main loop on the current thread.
