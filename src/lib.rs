@@ -81,6 +81,28 @@ struct Executor {
     /// Maximum number of threads in the pool
     thread_limit: usize,
 }
+macro_rules! runnable {
+    ($_self:ident spawn $f:ident) => {
+        runnable!(inside $_self, $f, schedule)
+    };
+    ($_self:ident spawns $f:ident) => {
+        runnable!(inside $_self, $f, schedules)
+    };
+    (inside $_self:ident, $f:ident, $m:ident) => {{
+        let (tx, rx) = oneshot();
+
+        $_self.$m(Box::new(move || {
+            let r = panic::catch_unwind($f);
+            let _ = tx.send(r.map_err(|_| Error));
+        }));
+        async move {
+            match rx.await {
+                Ok(result) => result,
+                Err(_) => Err(Error),
+            }
+        }
+    }};
+}
 
 impl Executor {
     #[inline(always)]
@@ -109,23 +131,7 @@ impl Executor {
         &'static self,
         f: impl IntoIterator<Item = impl Fun<T>>,
     ) -> Vec<impl Task<T>> {
-        let tasks = f
-            .into_iter()
-            .map(|f| {
-                let (tx, rx) = oneshot();
-
-                self.schedules(Box::new(move || {
-                    let r = panic::catch_unwind(f);
-                    let _ = tx.send(r.map_err(|_| Error));
-                }));
-                async move {
-                    match rx.await {
-                        Ok(result) => result,
-                        Err(_) => Err(Error),
-                    }
-                }
-            })
-            .collect();
+        let tasks = f.into_iter().map(|f| runnable!(self spawns f)).collect();
         self.grow_pool();
         tasks
     }
@@ -135,17 +141,7 @@ impl Executor {
     /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
     fn spawn<T: Val>(&'static self, f: impl Fun<T>) -> impl Task<T> {
-        let (tx, rx) = oneshot();
-        self.schedule(Box::new(move || {
-            let r = panic::catch_unwind(f);
-            let _ = tx.send(r.map_err(|_| Error));
-        }));
-        async move {
-            match rx.await {
-                Ok(result) => result,
-                Err(_) => Err(Error),
-            }
-        }
+        runnable!(self spawn f)
     }
 
     /// Runs the main loop on the current thread.
