@@ -170,17 +170,15 @@ impl Executor {
     fn schedules(&'static self, runnable: Runnable) {
         self.queue.lock().push_back(runnable);
 
-        // Notify a sleeping thread and spawn more threads if needed.
+        // Notify a sleeping thread
         self.cvar.notify_one();
     }
 
     /// Schedules a runnable task for execution.
     #[inline(always)]
     fn schedule(&'static self, runnable: Runnable) {
-        self.queue.lock().push_back(runnable);
-
-        // Notify a sleeping thread and spawn more threads if needed.
-        self.cvar.notify_one();
+        self.schedules(runnable);
+        // spawn more threads if needed.
         self.grow_pool();
     }
 
