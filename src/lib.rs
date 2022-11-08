@@ -72,7 +72,7 @@ struct Executor {
     /// Inner queue
     queue: Mutex<VecDeque<Runnable>>,
 
-    /// Number of spwamed threads
+    /// Number of spawned threads
     thread_count: AtomicUsize,
 
     /// Used to put idle threads to sleep and wake them up when new work comes in.
@@ -170,7 +170,7 @@ impl Executor {
         self.cvar.notify_one();
     }
 
-    /// Schedules a runnable task for execution.
+    /// Schedules a runnable task for execution and grow thread pool if needed
     #[inline(always)]
     fn schedule(&'static self, runnable: Runnable) {
         self.schedules(runnable);
@@ -182,7 +182,6 @@ impl Executor {
     #[inline(always)]
     fn grow_pool(&'static self) {
         while self.thread_count.load(Ordering::SeqCst) < self.thread_limit {
-            // The new thread starts in idle state.
             let id = self.thread_count.fetch_add(1, Ordering::Relaxed);
 
             // Spawn the new thread.
