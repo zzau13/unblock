@@ -105,7 +105,7 @@ impl Executor {
     ///
     /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
-    pub fn spawns<T: Val, G: Fun<T>, I: IntoIterator<Item = G>>(f: I) -> Vec<impl Task<T>> {
+    pub fn spawns<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
         let tasks = f
             .into_iter()
             .map(|f| {
@@ -214,7 +214,7 @@ impl Executor {
 ///
 /// Spawn a process:
 ///
-/// ```
+/// ```no_run
 /// use unblock::unblock;
 /// use std::process::Command;
 ///
@@ -228,6 +228,6 @@ pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
 }
 
 /// Runs multiple unblock code on a thread pool and return futures in order
-pub fn unblocks<T: Val, G: Fun<T>, I: IntoIterator<Item = G>>(f: I) -> Vec<impl Task<T>> {
+pub fn unblocks<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
     Executor::spawns(f)
 }
