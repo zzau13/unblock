@@ -105,13 +105,16 @@ impl Executor {
     ///
     /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
-    pub fn spawns<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
+    pub fn spawns<T: Val>(
+        &'static self,
+        f: impl IntoIterator<Item = impl Fun<T>>,
+    ) -> Vec<impl Task<T>> {
         let tasks = f
             .into_iter()
             .map(|f| {
                 let (tx, rx) = oneshot();
 
-                EXECUTOR.schedules(Box::new(move || {
+                self.schedules(Box::new(move || {
                     let r = panic::catch_unwind(f);
                     let _ = tx.send(r.map_err(|_| Error));
                 }));
@@ -123,7 +126,7 @@ impl Executor {
                 }
             })
             .collect();
-        EXECUTOR.grow_pool();
+        self.grow_pool();
         tasks
     }
 
@@ -131,9 +134,9 @@ impl Executor {
     ///
     /// Returns a [`Task`] handle for the spawned task.
     #[inline(always)]
-    fn spawn<T: Val>(f: impl Fun<T>) -> impl Task<T> {
+    fn spawn<T: Val>(&'static self, f: impl Fun<T>) -> impl Task<T> {
         let (tx, rx) = oneshot();
-        EXECUTOR.schedule(Box::new(move || {
+        self.schedule(Box::new(move || {
             let r = panic::catch_unwind(f);
             let _ = tx.send(r.map_err(|_| Error));
         }));
@@ -227,10 +230,10 @@ impl Executor {
 /// # }
 /// ```
 pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
-    Executor::spawn(f)
+    EXECUTOR.spawn(f)
 }
 
 /// Runs multiple unblock code on a thread pool and return futures in order
 pub fn unblocks<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
-    Executor::spawns(f)
+    EXECUTOR.spawns(f)
 }
