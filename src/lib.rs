@@ -214,7 +214,9 @@ impl Executor {
 ///
 /// Spawn a process:
 ///
-/// ```no_run
+/// ```
+/// # #[cfg(not(miri))]
+/// # {
 /// use unblock::unblock;
 /// use std::process::Command;
 ///
@@ -222,6 +224,7 @@ impl Executor {
 /// let out = unblock(|| Command::new("echo").arg("foo").output()).await??.stdout;
 /// assert_eq!(out, b"foo\n");
 /// # std::io::Result::Ok(()) });
+/// # }
 /// ```
 pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
     Executor::spawn(f)

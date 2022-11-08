@@ -64,7 +64,15 @@ test!(test_panic -> {
 });
 
 test!(test_unblocks -> {
-    for i in unblocks((0..10).map(|_| sleep)) {
-       assert!(i.await.is_ok());
+    for (x, i) in unblocks((0..10).map(|x| {
+        move || {
+            sleep();
+            x
+        }
+    }))
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(i.await, Ok(x));
     }
 });
