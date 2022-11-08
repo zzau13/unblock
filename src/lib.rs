@@ -132,7 +132,7 @@ impl Executor {
 
     /// Spawns futures onto this executor.
     #[inline(always)]
-    pub fn spawns<T: Val>(
+    fn spawns<T: Val>(
         &'static self,
         f: impl IntoIterator<Item = impl Fun<T>>,
     ) -> Vec<impl Task<T>> {
