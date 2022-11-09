@@ -3,21 +3,6 @@
 //! With `mt` feature the default number of threads (set to number of cpus) can be altered
 //! by setting `BLOCK_THREADS` environment variable with value.
 //!
-//! # Examples
-//!
-//! Read the contents of a file:
-//!
-//! ```
-//! use std::fs;
-//!
-//! use unblock::unblock;
-//!
-//! # futures::executor::block_on(async {
-//! let contents = unblock(|| fs::read_to_string("file.txt")).await?;
-//! println!("{:?}", contents);
-//! # std::io::Result::Ok(()) });
-//! ```
-//!
 
 use std::cmp::max;
 use std::collections::VecDeque;
@@ -25,9 +10,11 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::panic;
 use std::panic::UnwindSafe;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
+use std::thread::JoinHandle;
 
+use ctor::dtor;
 use once_cell::sync::Lazy;
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
@@ -38,6 +25,8 @@ static EXECUTOR: Lazy<Executor> = Lazy::new(|| {
     Executor {
         queue: Mutex::new(VecDeque::with_capacity(max(thread_limit, 256))),
         thread_count: AtomicUsize::new(0),
+        join: Mutex::new(Vec::with_capacity(thread_limit)),
+        shutdown: AtomicBool::new(false),
         cvar: Condvar::new(),
         thread_limit,
     }
@@ -79,6 +68,12 @@ struct Executor {
 
     /// Number of spawned threads
     thread_count: AtomicUsize,
+
+    /// Sho
+    join: Mutex<Vec<JoinHandle<()>>>,
+
+    /// Shout down threads can block all
+    shutdown: AtomicBool,
 
     /// Used to put idle threads to sleep and wake them up when new work comes in.
     cvar: Condvar,
@@ -162,6 +157,9 @@ impl Executor {
 
             // Put the thread to sleep until another task is scheduled.
             self.cvar.wait(&mut queue);
+            if self.shutdown.load(Ordering::Relaxed) {
+                break;
+            }
         }
     }
     /// Schedules a runnable task for execution.
@@ -184,67 +182,39 @@ impl Executor {
     /// Spawns more block threads
     #[inline(always)]
     fn grow_pool(&'static self) {
-        while self.thread_count.load(Ordering::SeqCst) < self.thread_limit {
+        while self.thread_count.load(Ordering::SeqCst) < self.thread_limit && !self.shutdown.load(Ordering::SeqCst) {
             let id = self.thread_count.fetch_add(1, Ordering::Relaxed);
 
             // Spawn the new thread.
-            thread::Builder::new()
+         self.join.lock().push(thread::Builder::new()
                 .name(format!("unblock-{}", id))
                 .spawn(move || self.main_loop())
-                .unwrap();
+                .unwrap());
+        }
+    }
+
+    /// Put executor in shutdown
+    fn drop(&'static self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+        self.queue.lock().drain(..);
+        self.cvar.notify_all();
+        for j in self.join.lock().drain(..).into_iter() {
+            let _ = j.join();
         }
     }
 }
 
+#[dtor]
+fn des() {
+    EXECUTOR.drop();
+}
+
 /// Runs unblock code on a thread pool and return a future
-///
-/// # Examples
-///
-/// Read the contents of a file:
-///
-/// ```
-/// use unblock::unblock;
-/// use std::fs;
-///
-/// # futures::executor::block_on(async {
-/// let contents = unblock(|| fs::read_to_string("file.txt")).await?;
-/// # std::io::Result::Ok(()) });
-/// ```
-///
-/// Spawn a process:
-///
-/// ```
-/// # #[cfg(not(miri))]
-/// # {
-/// use unblock::unblock;
-/// use std::process::Command;
-///
-/// # futures::executor::block_on(async {
-/// let out = unblock(|| Command::new("echo").arg("foo").output()).await??.stdout;
-/// assert_eq!(out, b"foo\n");
-/// # std::io::Result::Ok(()) });
-/// # }
-/// ```
 pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
     EXECUTOR.spawn(f)
 }
 
 /// Runs multiple unblock code on a thread pool and return futures in order
-///
-/// Read the contents of files:
-///
-/// ```
-/// use unblock::unblocks;
-/// use std::fs;
-///
-///
-/// # futures::executor::block_on(async { ///
-/// for result in unblocks(["name.txt", "foo.txt"].map(|name| move || fs::read_to_string(name))) {
-///     println!("{}", result.await??);
-/// }
-/// # std::io::Result::Ok(()) });
-/// ```
-///
 pub fn unblocks<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
     EXECUTOR.spawns(f)
 }
