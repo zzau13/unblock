@@ -14,7 +14,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::thread::JoinHandle;
 
-use ctor::{ctor, dtor};
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
 
@@ -35,7 +34,7 @@ static EXECUTOR: Lazy<Executor> = Lazy::new(|| {
 });
 
 /// Lazily initialized global executor.
-#[ctor]
+#[ctor::ctor]
 #[cfg(not(miri))]
 static EXECUTOR: Executor = {
     let thread_limit = Executor::max_threads();
@@ -226,7 +225,7 @@ impl Executor {
     }
 }
 
-#[dtor]
+#[ctor::dtor]
 fn des() {
     EXECUTOR.drop();
 }
