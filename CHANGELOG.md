@@ -1,3 +1,7 @@
+# 0.5.0 - 2022-11-09
+
+    - Add `lazy` feature for lazy init
+
 # 0.4.1 - 2022-11-09
 
     - Improve shutdown and use only `ctor` for lazy static
