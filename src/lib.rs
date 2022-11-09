@@ -69,10 +69,10 @@ struct Executor {
     /// Number of spawned threads
     thread_count: AtomicUsize,
 
-    /// Sho
+    /// Main thread waited
     join: Mutex<Vec<JoinHandle<()>>>,
 
-    /// Shout down threads can block all
+    /// Shutdown threads can block all
     shutdown: AtomicBool,
 
     /// Used to put idle threads to sleep and wake them up when new work comes in.
@@ -198,7 +198,7 @@ impl Executor {
         self.shutdown.store(true, Ordering::Relaxed);
         self.queue.lock().drain(..);
         self.cvar.notify_all();
-        for j in self.join.lock().drain(..).into_iter() {
+        for j in self.join.lock().drain(..) {
             let _ = j.join();
         }
     }
