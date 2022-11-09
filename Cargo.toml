@@ -13,7 +13,7 @@ categories = ["asynchronous", "concurrency"]
 [features]
 default = []
 mt = ["num_cpus"]
-miri = ["once_cell"]
+lazy = ["once_cell"]
 
 [dependencies]
 #async-oneshot = { git = "https://github.com/botika/async-oneshot", version = "0.5" }
