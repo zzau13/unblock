@@ -200,7 +200,7 @@ impl Executor {
     #[inline(always)]
     fn grow_pool(&'static self) {
         while self.thread_count.load(Ordering::SeqCst) < self.thread_limit
-            && !self.shutdown.load(Ordering::SeqCst)
+            && !self.shutdown.load(Ordering::Relaxed)
         {
             let id = self.thread_count.fetch_add(1, Ordering::Relaxed);
 
