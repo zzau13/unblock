@@ -18,8 +18,25 @@ use ctor::{ctor, dtor};
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
 
+#[cfg(miri)]
+use once_cell::sync::Lazy;
+
+#[cfg(miri)]
+static EXECUTOR: Lazy<Executor> = Lazy::new(|| {
+    let thread_limit = Executor::max_threads();
+    Executor {
+        queue: Mutex::new(VecDeque::with_capacity(max(thread_limit, 256))),
+        thread_count: AtomicUsize::new(0),
+        join: Mutex::new(Vec::with_capacity(thread_limit)),
+        shutdown: AtomicBool::new(false),
+        cvar: Condvar::new(),
+        thread_limit,
+    }
+});
+
 /// Lazily initialized global executor.
 #[ctor]
+#[cfg(not(miri))]
 static EXECUTOR: Executor = {
     let thread_limit = Executor::max_threads();
     Executor {
