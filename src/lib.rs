@@ -155,11 +155,12 @@ impl Executor {
                 queue = self.queue.lock();
             }
 
-            // Put the thread to sleep until another task is scheduled.
-            self.cvar.wait(&mut queue);
             if self.shutdown.load(Ordering::Relaxed) {
                 break;
             }
+
+            // Put the thread to sleep until another task is scheduled.
+            self.cvar.wait(&mut queue);
         }
     }
     /// Schedules a runnable task for execution.
