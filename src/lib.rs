@@ -14,13 +14,13 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::thread::JoinHandle;
 
-use ctor::dtor;
-use once_cell::sync::Lazy;
+use ctor::{ctor, dtor};
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
 
 /// Lazily initialized global executor.
-static EXECUTOR: Lazy<Executor> = Lazy::new(|| {
+#[ctor]
+static EXECUTOR: Executor = {
     let thread_limit = Executor::max_threads();
     Executor {
         queue: Mutex::new(VecDeque::with_capacity(max(thread_limit, 256))),
@@ -30,7 +30,7 @@ static EXECUTOR: Lazy<Executor> = Lazy::new(|| {
         cvar: Condvar::new(),
         thread_limit,
     }
-});
+};
 
 /// No-size error
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
