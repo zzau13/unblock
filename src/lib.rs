@@ -182,14 +182,18 @@ impl Executor {
     /// Spawns more block threads
     #[inline(always)]
     fn grow_pool(&'static self) {
-        while self.thread_count.load(Ordering::SeqCst) < self.thread_limit && !self.shutdown.load(Ordering::SeqCst) {
+        while self.thread_count.load(Ordering::SeqCst) < self.thread_limit
+            && !self.shutdown.load(Ordering::SeqCst)
+        {
             let id = self.thread_count.fetch_add(1, Ordering::Relaxed);
 
             // Spawn the new thread.
-         self.join.lock().push(thread::Builder::new()
-                .name(format!("unblock-{}", id))
-                .spawn(move || self.main_loop())
-                .unwrap());
+            self.join.lock().push(
+                thread::Builder::new()
+                    .name(format!("unblock-{}", id))
+                    .spawn(move || self.main_loop())
+                    .unwrap(),
+            );
         }
     }
 
