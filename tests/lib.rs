@@ -88,3 +88,16 @@ fn test_thread() {
     assert!(i.is_ok());
     assert!(j.is_ok());
 }
+
+#[test]
+fn test_shutdown() {
+    #[allow(unused_must_use)]
+    std::thread::spawn(|| {
+        for _ in 0..1024 * 1024 * 1024 {
+            std::thread::sleep(Duration::from_millis(1));
+            unblock(sleep);
+        }
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(block_on(unblock(sleep)).is_ok());
+}
