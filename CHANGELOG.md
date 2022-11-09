@@ -1,3 +1,7 @@
+# 0.4.0 - 2022-11-09
+
+    - Add gracefully destroy executor and join in the main thread
+
 # 0.3.1 - 2022-11-08
 
     - Simplify and prettify code and documentation
