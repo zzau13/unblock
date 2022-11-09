@@ -200,7 +200,7 @@ impl Executor {
 
     /// Put executor in shutdown
     fn drop(&'static self) {
-        self.shutdown.store(true, Ordering::Relaxed);
+        self.shutdown.store(true, Ordering::SeqCst);
         self.queue.lock().drain(..);
         self.cvar.notify_all();
         for j in self.join.lock().drain(..) {
