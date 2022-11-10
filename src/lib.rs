@@ -94,6 +94,7 @@ struct Executor {
     thread_limit: usize,
 }
 
+#[derive(Debug)]
 pub struct Join<T>(Receiver<Result<T, Error>>);
 
 impl<T> Future for Join<T> {
