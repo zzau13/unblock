@@ -8,8 +8,6 @@ use std::cmp::max;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
-use std::panic;
-use std::panic::UnwindSafe;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{ready, Context, Poll};
@@ -68,8 +66,8 @@ impl From<Error> for std::io::Error {
 pub trait Val: Send + 'static {}
 impl<T: Send + 'static> Val for T {}
 
-pub trait Fun<T: Val>: FnOnce() -> T + UnwindSafe + Val {}
-impl<T: Val, F: FnOnce() -> T + UnwindSafe + Val> Fun<T> for F {}
+pub trait Fun<T: Val>: FnOnce() -> T + Val {}
+impl<T: Val, F: FnOnce() -> T + Val> Fun<T> for F {}
 
 type Runnable = Box<dyn FnOnce() + Send + 'static>;
 
@@ -94,17 +92,25 @@ struct Executor {
     thread_limit: usize,
 }
 
+struct LiveMonitor;
+
+impl Drop for LiveMonitor {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            EXECUTOR.thread_count.fetch_sub(1, Ordering::Relaxed);
+            EXECUTOR.grow_pool();
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct Join<T>(Receiver<Result<T, Error>>);
+pub struct Join<T>(Receiver<T>);
 
 impl<T> Future for Join<T> {
     type Output = Result<T, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(match ready!(Pin::new(&mut self.0).poll(cx)) {
-            Ok(result) => result,
-            Err(_) => Err(Error),
-        })
+        Poll::Ready(ready!(Pin::new(&mut self.0).poll(cx)).map_err(|_| Error))
     }
 }
 
@@ -120,8 +126,7 @@ macro_rules! run {
         let (tx, rx) = oneshot();
 
         $_self.$m(Box::new(move || {
-            let r = panic::catch_unwind($f);
-            let _ = tx.send(r.map_err(|_| Error));
+            let _ = tx.send($f());
         }));
         Join(rx)
     }};
@@ -164,6 +169,7 @@ impl Executor {
     ///
     /// This function runs unblock tasks until it becomes idle.
     fn main_loop(&'static self) {
+        let _live = LiveMonitor;
         let mut queue = self.queue.lock();
         loop {
             // Run tasks in the queue.
