@@ -10,12 +10,15 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::panic;
 use std::panic::UnwindSafe;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::task::{ready, Context, Poll};
 use std::thread;
 use std::thread::JoinHandle;
 
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::oneshot::channel as oneshot;
+use tokio::sync::oneshot::Receiver;
 
 macro_rules! exec {
     () => {{
@@ -65,9 +68,6 @@ impl From<Error> for std::io::Error {
 pub trait Val: Send + 'static {}
 impl<T: Send + 'static> Val for T {}
 
-pub trait Task<T: Val>: Future<Output = Result<T, Error>> {}
-impl<T: Val, F: Future<Output = Result<T, Error>>> Task<T> for F {}
-
 pub trait Fun<T: Val>: FnOnce() -> T + UnwindSafe + Val {}
 impl<T: Val, F: FnOnce() -> T + UnwindSafe + Val> Fun<T> for F {}
 
@@ -94,6 +94,19 @@ struct Executor {
     thread_limit: usize,
 }
 
+pub struct Join<T>(Receiver<Result<T, Error>>);
+
+impl<T> Future for Join<T> {
+    type Output = Result<T, Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(match ready!(Pin::new(&mut self.0).poll(cx)) {
+            Ok(result) => result,
+            Err(_) => Err(Error),
+        })
+    }
+}
+
 /// create Runnable, schedule and return join
 macro_rules! run {
     ($f:ident in $_self:ident) => {
@@ -109,12 +122,7 @@ macro_rules! run {
             let r = panic::catch_unwind($f);
             let _ = tx.send(r.map_err(|_| Error));
         }));
-        async move {
-            match rx.await {
-                Ok(result) => result,
-                Err(_) => Err(Error),
-            }
-        }
+        Join(rx)
     }};
 }
 
@@ -139,10 +147,7 @@ impl Executor {
 
     /// Spawns futures onto this executor.
     #[inline(always)]
-    fn spawns<T: Val>(
-        &'static self,
-        f: impl IntoIterator<Item = impl Fun<T>>,
-    ) -> Vec<impl Task<T>> {
+    fn spawns<T: Val>(&'static self, f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<Join<T>> {
         let tasks = f.into_iter().map(|f| run!(f 's in self)).collect();
         self.grow_pool();
         tasks
@@ -150,7 +155,7 @@ impl Executor {
 
     /// Spawns a future onto this executor.
     #[inline(always)]
-    fn spawn<T: Val>(&'static self, f: impl Fun<T>) -> impl Task<T> {
+    fn spawn<T: Val>(&'static self, f: impl Fun<T>) -> Join<T> {
         run!(f in self)
     }
 
@@ -230,11 +235,11 @@ fn des() {
 }
 
 /// Runs unblock code on a thread pool and return a future
-pub fn unblock<T: Val>(f: impl Fun<T>) -> impl Task<T> {
+pub fn unblock<T: Val>(f: impl Fun<T>) -> Join<T> {
     EXECUTOR.spawn(f)
 }
 
 /// Runs multiple unblock code on a thread pool and return futures in order
-pub fn unblocks<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<impl Task<T>> {
+pub fn unblocks<T: Val>(f: impl IntoIterator<Item = impl Fun<T>>) -> Vec<Join<T>> {
     EXECUTOR.spawns(f)
 }
