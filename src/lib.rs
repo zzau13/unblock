@@ -178,6 +178,9 @@ impl Executor {
     /// Schedules a runnable task for execution.
     #[inline(always)]
     fn schedules(&'static self, runnable: Runnable) {
+        if self.shutdown.load(Ordering::Relaxed) {
+            return;
+        }
         self.queue.lock().push_back(runnable);
 
         // Notify a sleeping thread
