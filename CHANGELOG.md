@@ -1,3 +1,7 @@
+# 0.6.0 - 2022-11-10
+
+    - Remove panic unwind in favor of live monitor resurrector at panic
+
 # 0.5.1 - 2022-11-10
 
     - Make sure force shutdown gracefully

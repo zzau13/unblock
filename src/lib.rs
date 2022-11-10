@@ -10,7 +10,7 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -110,7 +110,13 @@ impl<T> Future for Join<T> {
     type Output = Result<T, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(ready!(Pin::new(&mut self.0).poll(cx)).map_err(|_| Error))
+        Poll::Ready(
+            match Pin::new(&mut self.0).poll(cx) {
+                Poll::Ready(t) => t,
+                Poll::Pending => return Poll::Pending,
+            }
+            .map_err(|_| Error),
+        )
     }
 }
 
