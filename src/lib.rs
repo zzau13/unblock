@@ -97,7 +97,7 @@ struct LiveMonitor;
 impl Drop for LiveMonitor {
     fn drop(&mut self) {
         if thread::panicking() {
-            EXECUTOR.thread_count.fetch_sub(1, Ordering::Relaxed);
+            EXECUTOR.thread_count.fetch_sub(1, Ordering::SeqCst);
             EXECUTOR.grow_pool();
         }
     }
