@@ -1,3 +1,7 @@
+# 0.5.1 - 2022-11-10
+
+    - Make sure force shutdown gracefully
+
 # 0.5.0 - 2022-11-09
 
     - Add `lazy` feature for lazy init
