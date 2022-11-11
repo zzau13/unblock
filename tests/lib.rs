@@ -38,7 +38,6 @@ test!(test_join -> {
     assert!(join_all(fut).await.iter().all(|x| x.is_ok()));
 });
 
-// #[cfg(not(miri))]
 test!(test_panic -> {
     assert!(unblock(|| {
         panic!();
@@ -65,7 +64,6 @@ test!(test_panic -> {
     );
 });
 
-#[cfg(not(miri))]
 test!(test_unblocks -> {
     for (x, i) in unblocks((0..10).map(|x| {
         move || {
@@ -84,8 +82,9 @@ test!(test_unblocks -> {
 fn test_thread() {
     let j = std::thread::spawn(|| block_on(unblock(sleep)));
     let fut_j = std::thread::spawn(|| unblock(sleep)).join().unwrap();
+    let fut = unblock(sleep);
     assert!(j.join().is_ok());
-    let (i, j) = block_on(join(unblock(sleep), fut_j));
+    let (i, j) = block_on(join(fut, fut_j));
     assert!(i.is_ok());
     assert!(j.is_ok());
 }
