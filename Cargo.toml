@@ -17,7 +17,7 @@ lazy = ["once_cell"]
 
 [dependencies]
 #async-oneshot = { git = "https://github.com/botika/async-oneshot", version = "0.5" }
-tokio = { version = "1.21", default-features = false, features = ["sync"] }
+oneshot = { git = "https://github.com/botika/oneshot" }
 num_cpus = { version = "1.13", optional = true }
 parking_lot = "0.12"
 ctor = "0.1"

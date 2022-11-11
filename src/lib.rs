@@ -15,8 +15,8 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use parking_lot::{Condvar, Mutex};
-use tokio::sync::oneshot::channel as oneshot;
-use tokio::sync::oneshot::Receiver;
+use oneshot::channel as oneshot;
+use oneshot::Receiver;
 
 macro_rules! exec {
     () => {{

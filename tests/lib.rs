@@ -38,6 +38,7 @@ test!(test_join -> {
     assert!(join_all(fut).await.iter().all(|x| x.is_ok()));
 });
 
+// #[cfg(not(miri))]
 test!(test_panic -> {
     assert!(unblock(|| {
         panic!();
@@ -64,6 +65,7 @@ test!(test_panic -> {
     );
 });
 
+#[cfg(not(miri))]
 test!(test_unblocks -> {
     for (x, i) in unblocks((0..10).map(|x| {
         move || {

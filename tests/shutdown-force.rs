@@ -8,5 +8,7 @@ fn test_shutdown_f() {
     std::thread::spawn(|| loop {
         unblock(|| std::thread::sleep(Duration::from_secs(1)));
     });
-    std::thread::sleep(Duration::from_millis(100))
+    #[cfg(not(miri))]
+    std::thread::sleep(Duration::from_millis(100));
+    std::thread::sleep(Duration::from_millis(1));
 }
