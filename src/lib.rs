@@ -14,9 +14,9 @@ use std::task::{Context, Poll};
 use std::thread;
 use std::thread::JoinHandle;
 
-use parking_lot::{Condvar, Mutex};
 use oneshot::channel as oneshot;
 use oneshot::Receiver;
+use parking_lot::{Condvar, Mutex};
 
 macro_rules! exec {
     () => {{
