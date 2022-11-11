@@ -84,9 +84,8 @@ test!(test_unblocks -> {
 fn test_thread() {
     let j = std::thread::spawn(|| block_on(unblock(sleep)));
     let fut_j = std::thread::spawn(|| unblock(sleep)).join().unwrap();
-    let fut = unblock(sleep);
     assert!(j.join().is_ok());
-    let (i, j) = block_on(join(fut, fut_j));
+    let (i, j) = block_on(join(unblock(sleep), fut_j));
     assert!(i.is_ok());
     assert!(j.is_ok());
 }
