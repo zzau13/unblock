@@ -25,11 +25,10 @@ use parking_lot::{Condvar, Mutex};
 // use self::tokio::*;
 
 mod kanal {
-    pub use kanal::OneshotReceiveFuture as Receiver;
     pub use kanal::oneshot_async as oneshot;
+    pub use kanal::OneshotReceiveFuture as Receiver;
 }
 use self::kanal::*;
-
 
 macro_rules! exec {
     () => {{
