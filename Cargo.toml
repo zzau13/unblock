@@ -11,17 +11,18 @@ keywords = ["async", "spawn_blocking"]
 categories = ["asynchronous", "concurrency"]
 
 [features]
-default = []
+default = ["kanal"]
 mt = ["num_cpus"]
 lazy = ["once_cell"]
 
 [dependencies]
 #async-oneshot = { git = "https://github.com/botika/async-oneshot", version = "0.5" }
-tokio = { version = "1.23", default-features = false, features = ["sync"] }
-num_cpus = { version = "1.15", optional = true }
+kanal = { git = "https://github.com/fereidani/kanal.git", optional = true }
+tokio = { version = "1.21", default-features = false, features = ["sync"], package = "tokio", optional = true }
+num_cpus = { version = "1.13", optional = true }
 parking_lot = "0.12"
 ctor = "0.1"
-once_cell = { version = "1.17", optional = true }
+once_cell = { version = "1.4", optional = true }
 
 [dev-dependencies]
 futures = "0.3"

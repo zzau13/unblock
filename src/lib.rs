@@ -15,8 +15,21 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use parking_lot::{Condvar, Mutex};
-use tokio::sync::oneshot::channel as oneshot;
-use tokio::sync::oneshot::Receiver;
+// #[cfg(feature = "tokio")]
+// mod tokio {
+//     pub use tokio::sync::oneshot::channel as oneshot;
+//     pub use tokio::sync::oneshot::Receiver;
+// }
+//
+// #[cfg(feature = "tokio")]
+// use self::tokio::*;
+
+mod kanal {
+    pub use kanal::OneshotReceiveFuture as Receiver;
+    pub use kanal::oneshot_async as oneshot;
+}
+use self::kanal::*;
+
 
 macro_rules! exec {
     () => {{
@@ -106,7 +119,7 @@ impl Drop for LiveMonitor {
 #[derive(Debug)]
 pub struct Join<T>(Receiver<T>);
 
-impl<T> Future for Join<T> {
+impl<T: Unpin> Future for Join<T> {
     type Output = Result<T, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -134,7 +147,7 @@ macro_rules! run {
         $_self.$m(Box::new(move || {
             let _ = tx.send($f());
         }));
-        Join(rx)
+        Join(rx.recv())
     }};
 }
 
