@@ -4,7 +4,6 @@
 //! by setting `BLOCK_THREADS` environment variable with value.
 //!
 
-use pin_project_lite::pin_project;
 use std::cmp::max;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
@@ -16,6 +15,7 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use parking_lot::{Condvar, Mutex};
+use pin_project_lite::pin_project;
 
 #[cfg(feature = "tokio")]
 mod tok {
@@ -194,8 +194,7 @@ impl<T> Future for Join<T> {
     type Output = Result<T, Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        Poll::Ready(ready!(this.recv.poll(cx)).map_err(|_| Error))
+        Poll::Ready(ready!(self.project().recv.poll(cx)).map_err(|_| Error))
     }
 }
 
