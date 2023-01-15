@@ -58,6 +58,35 @@ mod kan {
 #[cfg(all(feature = "kanal", not(feature = "tokio")))]
 use self::kan::*;
 
+#[cfg(all(
+    feature = "async-oneshot",
+    not(feature = "kanal"),
+    not(feature = "tokio")
+))]
+mod asyn {
+    pub use async_oneshot::Receiver;
+
+    #[macro_export]
+    /// create Runnable, schedule and return join
+    macro_rules! runs {
+        (inside $_self:ident, $f:ident, $m:ident) => {{
+            let (mut tx, rx) = async_oneshot::oneshot();
+
+            $_self.$m(Box::new(move || {
+                let _ = tx.send($f());
+            }));
+            Join { recv: rx }
+        }};
+    }
+}
+
+#[cfg(all(
+    feature = "async-oneshot",
+    not(feature = "kanal"),
+    not(feature = "tokio")
+))]
+use self::asyn::*;
+
 /// create Runnable, schedule and return join
 macro_rules! run {
     ($f:ident in $_self:ident) => {
