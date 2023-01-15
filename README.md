@@ -4,6 +4,9 @@ A thread pool for isolating blocking in async programs.
 With `mt` feature the default number of threads (set to number of cpus) can be altered 
 by setting `BLOCK_THREADS` environment variable with value.
 
+`kanal` and `async-oneshot` features are based in possible unsafe or deadlock implementations. 
+Use under your responsibility.
+
 ## License
 
 Licensed under either of
