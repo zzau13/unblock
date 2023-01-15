@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - master
-  schedule:
-    - cron: '0 2 * * *'
 
 env:
   RUSTFLAGS: -D warnings
@@ -30,6 +28,8 @@ jobs:
         run: cargo check --all-features
       - run: cargo test
       - run: cargo test --features=mt
+      - run: cargo test --no-default-features --features=mt,kanal
+      - run: cargo test --no-default-features --features=mt,async-oneshot
 
   msrv:
     runs-on: ubuntu-latest
@@ -37,7 +37,7 @@ jobs:
       matrix:
         # When updating this, the reminder to update the minimum supported
         # Rust version in Cargo.toml and .clippy.toml.
-        rust: ['1.57']
+        rust: ['1.64']
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
@@ -68,6 +68,16 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install nightly --component miri && rustup default nightly
       - run: cargo miri test --all-features
+        env:
+          # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
+          MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-ignore-leaks
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Z randomize-layout
+      - run: cargo miri test --no-default-features --features lazy,mt,kanal
+        env:
+          # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
+          MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-ignore-leaks
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Z randomize-layout
+      - run: cargo miri test --no-default-features --features lazy,mt,async-oneshot
         env:
           # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
           MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-ignore-leaks

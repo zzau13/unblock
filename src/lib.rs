@@ -10,13 +10,92 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::thread;
 use std::thread::JoinHandle;
 
 use parking_lot::{Condvar, Mutex};
-use tokio::sync::oneshot::channel as oneshot;
-use tokio::sync::oneshot::Receiver;
+use pin_project_lite::pin_project;
+
+#[cfg(feature = "tokio")]
+mod tok {
+    pub use tokio::sync::oneshot::Receiver;
+
+    #[macro_export]
+    /// create Runnable, schedule and return join
+    macro_rules! runs {
+        (inside $_self:ident, $f:ident, $m:ident) => {{
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            $_self.$m(Box::new(move || {
+                let _ = tx.send($f());
+            }));
+            Join { recv: rx }
+        }};
+    }
+}
+
+#[cfg(feature = "tokio")]
+use self::tok::*;
+
+#[cfg(all(feature = "kanal", not(feature = "tokio")))]
+mod kan {
+    pub use kanal::OneshotReceiveFuture as Receiver;
+
+    #[macro_export]
+    /// create Runnable, schedule and return join
+    macro_rules! runs {
+        (inside $_self:ident, $f:ident, $m:ident) => {{
+            let (tx, rx) = kanal::oneshot_async();
+
+            $_self.$m(Box::new(move || {
+                let _ = tx.to_sync().send($f());
+            }));
+            Join { recv: rx.recv() }
+        }};
+    }
+}
+#[cfg(all(feature = "kanal", not(feature = "tokio")))]
+use self::kan::*;
+
+#[cfg(all(
+    feature = "async-oneshot",
+    not(feature = "kanal"),
+    not(feature = "tokio")
+))]
+mod asyn {
+    pub use async_oneshot::Receiver;
+
+    #[macro_export]
+    /// create Runnable, schedule and return join
+    macro_rules! runs {
+        (inside $_self:ident, $f:ident, $m:ident) => {{
+            let (mut tx, rx) = async_oneshot::oneshot();
+
+            $_self.$m(Box::new(move || {
+                let _ = tx.send($f());
+            }));
+            Join { recv: rx }
+        }};
+    }
+}
+
+#[cfg(all(
+    feature = "async-oneshot",
+    not(feature = "kanal"),
+    not(feature = "tokio")
+))]
+use self::asyn::*;
+
+/// create Runnable, schedule and return join
+macro_rules! run {
+    ($f:ident in $_self:ident) => {
+        crate::runs!(inside $_self, $f, schedule)
+    };
+    ($f:ident 's in $_self:ident ) => {
+        crate::runs!(inside $_self, $f, schedules)
+    };
+}
 
 macro_rules! exec {
     () => {{
@@ -103,39 +182,20 @@ impl Drop for LiveMonitor {
     }
 }
 
-#[derive(Debug)]
-pub struct Join<T>(Receiver<T>);
+pin_project! {
+    #[derive(Debug)]
+    pub struct Join<T> {
+        #[pin]
+        recv: Receiver<T>
+    }
+}
 
 impl<T> Future for Join<T> {
     type Output = Result<T, Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(
-            match Pin::new(&mut self.0).poll(cx) {
-                Poll::Ready(t) => t,
-                Poll::Pending => return Poll::Pending,
-            }
-            .map_err(|_| Error),
-        )
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(ready!(self.project().recv.poll(cx)).map_err(|_| Error))
     }
-}
-
-/// create Runnable, schedule and return join
-macro_rules! run {
-    ($f:ident in $_self:ident) => {
-        run!(inside $_self, $f, schedule)
-    };
-    ($f:ident 's in $_self:ident ) => {
-        run!(inside $_self, $f, schedules)
-    };
-    (inside $_self:ident, $f:ident, $m:ident) => {{
-        let (tx, rx) = oneshot();
-
-        $_self.$m(Box::new(move || {
-            let _ = tx.send($f());
-        }));
-        Join(rx)
-    }};
 }
 
 impl Executor {
