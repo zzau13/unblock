@@ -56,7 +56,7 @@ mod kan {
     }
 }
 #[cfg(all(feature = "kanal", not(feature = "tokio")))]
-use self::kanal::*;
+use self::kan::*;
 
 /// create Runnable, schedule and return join
 macro_rules! run {
