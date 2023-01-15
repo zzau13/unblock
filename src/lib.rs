@@ -10,9 +10,10 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, ready};
 use std::thread;
 use std::thread::JoinHandle;
+use pin_project_lite::pin_project;
 
 use parking_lot::{Condvar, Mutex};
 // #[cfg(feature = "tokio")]
@@ -115,20 +116,21 @@ impl Drop for LiveMonitor {
     }
 }
 
-#[derive(Debug)]
-pub struct Join<T>(Receiver<T>);
 
-impl<T: Unpin> Future for Join<T> {
+pin_project! {
+    #[derive(Debug)]
+    pub struct Join<T> {
+        #[pin]
+        recv: Receiver<T>
+    }
+}
+
+impl<T> Future for Join<T> {
     type Output = Result<T, Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(
-            match Pin::new(&mut self.0).poll(cx) {
-                Poll::Ready(t) => t,
-                Poll::Pending => return Poll::Pending,
-            }
-            .map_err(|_| Error),
-        )
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        Poll::Ready(ready!(this.recv.poll(cx)).map_err(|_| Error))
     }
 }
 
@@ -144,9 +146,9 @@ macro_rules! run {
         let (tx, rx) = oneshot();
 
         $_self.$m(Box::new(move || {
-            let _ = tx.send($f());
+            let _ = tx.to_sync().send($f());
         }));
-        Join(rx.recv())
+        Join { recv: rx.recv() }
     }};
 }
 

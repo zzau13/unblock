@@ -18,6 +18,7 @@ lazy = ["once_cell"]
 [dependencies]
 #async-oneshot = { git = "https://github.com/botika/async-oneshot", version = "0.5" }
 kanal = { git = "https://github.com/fereidani/kanal.git", optional = true }
+pin-project-lite = "0.2"
 tokio = { version = "1.24", default-features = false, features = ["sync"], package = "tokio", optional = true }
 num_cpus = { version = "1.15", optional = true }
 parking_lot = "0.12"
