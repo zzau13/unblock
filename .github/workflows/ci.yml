@@ -29,8 +29,8 @@ jobs:
         run: cargo check --all-features
       - run: cargo test
       - run: cargo test --features=mt
-      - run: cargo test --no-default-features --features=mt,kanal
       - run: cargo test --no-default-features --features=mt,async-oneshot
+      - run: cargo test --no-default-features --features=mt,kanal
 
   msrv:
     runs-on: ubuntu-latest
