@@ -12,7 +12,7 @@ env:
 
 jobs:
   test:
-    timeout-minutes: 5
+    timeout-minutes: 2
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -64,6 +64,7 @@ jobs:
 
   miri:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
