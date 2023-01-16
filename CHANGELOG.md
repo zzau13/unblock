@@ -1,3 +1,8 @@
+# 0.7.0 - 2023-01-16
+
+    - Fix memory leaks when panics
+    - Add `kanal` and `async-oneshot` features
+
 # 0.6.0 - 2022-11-10
 
     - Remove panic unwind in favor of live monitor resurrector at panic

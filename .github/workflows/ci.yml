@@ -12,6 +12,7 @@ env:
 
 jobs:
   test:
+    timeout-minutes: 5
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
