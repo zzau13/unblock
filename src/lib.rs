@@ -5,7 +5,7 @@
 //!
 
 use std::cmp::max;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
@@ -101,11 +101,11 @@ macro_rules! exec {
     () => {{
         let thread_limit = Executor::max_threads();
         Executor {
-            queue: Mutex::new(VecDeque::with_capacity(max(thread_limit, 256))),
-            thread_count: AtomicUsize::new(0),
-            join: Mutex::new(Vec::with_capacity(thread_limit)),
-            shutdown: AtomicBool::new(false),
             cvar: Condvar::new(),
+            join: Mutex::new(HashMap::with_capacity(thread_limit)),
+            queue: Mutex::new(VecDeque::with_capacity(max(thread_limit, 256))),
+            shutdown: AtomicBool::new(false),
+            thread_count: AtomicUsize::new(0),
             thread_limit,
         }
     }};
@@ -159,7 +159,7 @@ struct Executor {
     thread_count: AtomicUsize,
 
     /// Main thread waited
-    join: Mutex<Vec<JoinHandle<()>>>,
+    join: Mutex<HashMap<usize, JoinHandle<()>>>,
 
     /// Shutdown threads can block all
     shutdown: AtomicBool,
@@ -171,13 +171,18 @@ struct Executor {
     thread_limit: usize,
 }
 
-struct LiveMonitor;
+struct LiveMonitor(usize);
 
 impl Drop for LiveMonitor {
     fn drop(&mut self) {
         if thread::panicking() {
             EXECUTOR.thread_count.fetch_sub(1, Ordering::SeqCst);
             EXECUTOR.grow_pool();
+            let _ = EXECUTOR
+                .join
+                .lock()
+                .remove(&self.0)
+                .expect("Should be exist");
         }
     }
 }
@@ -235,7 +240,6 @@ impl Executor {
     ///
     /// This function runs unblock tasks until it becomes idle.
     fn main_loop(&'static self) {
-        let _live = LiveMonitor;
         let mut queue = self.queue.lock();
         loop {
             // Run tasks in the queue.
@@ -282,10 +286,14 @@ impl Executor {
             let id = self.thread_count.fetch_add(1, Ordering::Relaxed);
 
             // Spawn the new thread.
-            self.join.lock().push(
+            self.join.lock().insert(
+                id,
                 thread::Builder::new()
                     .name(format!("unblock-{}", id))
-                    .spawn(move || self.main_loop())
+                    .spawn(move || {
+                        let _live = LiveMonitor(id);
+                        self.main_loop()
+                    })
                     .unwrap(),
             );
         }
@@ -296,7 +304,7 @@ impl Executor {
         self.shutdown.store(true, Ordering::SeqCst);
         self.queue.lock().drain(..);
         self.cvar.notify_all();
-        for j in self.join.lock().drain(..) {
+        for (_, j) in self.join.lock().drain() {
             let _ = j.join();
         }
     }
