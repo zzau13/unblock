@@ -1,4 +1,5 @@
 # unblock [![Latest version](https://img.shields.io/crates/v/unblock.svg)](https://crates.io/crates/unblock)
+
 A thread pool for isolating blocking in async programs.
 
 With `mt` feature the default number of threads (set to number of cpus) can be altered 
