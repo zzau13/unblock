@@ -29,7 +29,7 @@ jobs:
         run: cargo check --all-features
       - run: cargo test
       - run: cargo test --features=mt
-      - run: cargo test --no-default-features --features=mt,async-oneshot
+#      - run: cargo test --no-default-features --features=mt,async-oneshot
       - run: cargo test --no-default-features --features=mt,kanal
 
   msrv:
@@ -79,11 +79,11 @@ jobs:
           # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
           MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-ignore-leaks
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Z randomize-layout
-      - run: cargo miri test --no-default-features --features lazy,mt,async-oneshot
-        env:
-          # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
-          MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-ignore-leaks
-          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Z randomize-layout
+#      - run: cargo miri test --no-default-features --features lazy,mt,async-oneshot
+#        env:
+#          # -Zmiri-ignore-leaks is needed because we use detached threads in tests/docs: https://github.com/rust-lang/miri/issues/1371
+#          MIRIFLAGS: -Zmiri-symbolic-alignment-check -Zmiri-ignore-leaks
+#          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Z randomize-layout
 
   security_audit:
     runs-on: ubuntu-latest

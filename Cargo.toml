@@ -22,7 +22,7 @@ once_cell = { version = "1.4", optional = true }
 parking_lot = "0.12"
 pin-project-lite = "0.2"
 
-async-oneshot = { git = "https://github.com/botika/async-oneshot", version = "0.5", optional = true }
+#async-oneshot = { git = "https://github.com/botika/async-oneshot", version = "0.5", optional = true }
 tokio = { version = "1.24", default-features = false, features = ["sync"], package = "tokio", optional = true }
 kanal = { git = "https://github.com/fereidani/kanal.git", optional = true }
 
